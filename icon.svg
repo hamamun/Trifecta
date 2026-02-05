@@ -1,5 +1,32 @@
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="512" height="512" rx="128" fill="#0ea5e9"/>
-  <path d="M160 128h192c17.673 0 32 14.327 32 32v192c0 17.673-14.327 32-32 32H160c-17.673 0-32-14.327-32-32V160c0-17.673 14.327-32 32-32z" fill="white"/>
-  <path d="M192 208h128M192 256h128M192 304h96" stroke="#0ea5e9" stroke-width="16" stroke-linecap="round"/>
+  <!-- Background with gradient -->
+  <defs>
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0ea5e9;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="128" fill="url(#grad1)"/>
+  
+  <!-- Three overlapping cards representing Lists, Notes, Events -->
+  <!-- Card 1 - Lists (back) -->
+  <rect x="80" y="140" width="180" height="240" rx="16" fill="white" opacity="0.9"/>
+  <rect x="110" y="180" width="120" height="12" rx="6" fill="#0ea5e9"/>
+  <rect x="110" y="210" width="120" height="12" rx="6" fill="#0ea5e9"/>
+  <rect x="110" y="240" width="90" height="12" rx="6" fill="#0ea5e9"/>
+  
+  <!-- Card 2 - Notes (middle) -->
+  <rect x="166" y="120" width="180" height="240" rx="16" fill="white" opacity="0.95"/>
+  <rect x="196" y="160" width="120" height="12" rx="6" fill="#8b5cf6"/>
+  <rect x="196" y="190" width="120" height="12" rx="6" fill="#8b5cf6"/>
+  <rect x="196" y="220" width="100" height="12" rx="6" fill="#8b5cf6"/>
+  <rect x="196" y="250" width="80" height="12" rx="6" fill="#8b5cf6"/>
+  
+  <!-- Card 3 - Events (front) -->
+  <rect x="252" y="100" width="180" height="240" rx="16" fill="white"/>
+  <rect x="252" y="100" width="180" height="50" rx="16" fill="#0ea5e9"/>
+  <text x="342" y="135" font-family="Arial, sans-serif" font-size="32" font-weight="bold" fill="white" text-anchor="middle">15</text>
+  <rect x="282" y="180" width="120" height="12" rx="6" fill="#0ea5e9" opacity="0.6"/>
+  <rect x="282" y="210" width="100" height="12" rx="6" fill="#0ea5e9" opacity="0.6"/>
+  <rect x="282" y="240" width="120" height="12" rx="6" fill="#0ea5e9" opacity="0.6"/>
 </svg>
