@@ -1,0 +1,73 @@
+name: Sync Notification
+
+on:
+  push:
+    paths:
+      - 'v3/lists/**'
+      - 'v3/notes/**'
+      - 'v3/events/**'
+    branches:
+      - main
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      
+      - name: Update sync status
+        run: |
+          # Get changed file types
+          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
+          CHANGED_TYPES=""
+          
+          if echo "$CHANGED_FILES" | grep -q "v3/lists/"; then
+            CHANGED_TYPES="${CHANGED_TYPES}lists,"
+          fi
+          
+          if echo "$CHANGED_FILES" | grep -q "v3/notes/"; then
+            CHANGED_TYPES="${CHANGED_TYPES}notes,"
+          fi
+          
+          if echo "$CHANGED_FILES" | grep -q "v3/events/"; then
+            CHANGED_TYPES="${CHANGED_TYPES}events,"
+          fi
+          
+          # Remove trailing comma
+          CHANGED_TYPES=$(echo "$CHANGED_TYPES" | sed 's/,$//')
+          
+          # Get device info from commit message or use "unknown"
+          DEVICE=$(git log -1 --pretty=%B | grep -oP 'from \K[^-]+' || echo "unknown")
+          DEVICE=$(echo "$DEVICE" | xargs)
+          
+          # Create sync status file
+          cat > sync-status.json << EOF
+          {
+            "lastSync": $(date +%s)000,
+            "device": "$DEVICE",
+            "changedTypes": "$CHANGED_TYPES",
+            "commit": "$(git rev-parse --short HEAD)",
+            "timestamp": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          }
+          EOF
+          
+          echo "Created sync-status.json:"
+          cat sync-status.json
+      
+      - name: Commit sync status
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add sync-status.json
+          
+          # Only commit if there are changes
+          if git diff --staged --quiet; then
+            echo "No changes to sync-status.json"
+          else
+            git commit -m "Update sync status [skip ci]"
+            git push
+          fi

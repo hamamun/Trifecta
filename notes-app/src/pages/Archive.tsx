@@ -16,6 +16,16 @@ interface ArchiveProps {
   onToggleSidebar?: () => void;
 }
 
+// Helper function to get device ID
+function getDeviceId(): string {
+  let deviceId = localStorage.getItem('notes-app-device-id');
+  if (!deviceId) {
+    deviceId = `device_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    localStorage.setItem('notes-app-device-id', deviceId);
+  }
+  return deviceId;
+}
+
 export function Archive({ onClose, sidebarOpen = false, onToggleSidebar }: ArchiveProps) {
   const [archivedLists, setArchivedLists] = useState<ArchivedItem[]>([]);
   const [archivedNotes, setArchivedNotes] = useState<ArchivedItem[]>([]);
@@ -33,12 +43,36 @@ export function Archive({ onClose, sidebarOpen = false, onToggleSidebar }: Archi
     return (saved as 'smart' | 'a-z' | 'z-a' | 'newest' | 'oldest') || 'smart';
   });
 
+  // Close handler
+  const handleClose = () => {
+    // Sync in background on exit (no await)
+    (async () => {
+      const { syncAll, isOnlineMode, getGitHubConfig } = await import('../utils/github');
+      if (isOnlineMode() && getGitHubConfig()) {
+        console.log('Exiting Archive - syncing all data...');
+        syncAll();  // No await - background sync
+      }
+    })();
+    
+    onClose();  // Close immediately, don't wait for sync
+  };
+
   useEffect(() => {
+    // Load items IMMEDIATELY from localStorage
     loadArchivedItems();
     
-    // Listen for sync completion to reload data
+    // Sync in background (no await)
+    (async () => {
+      const { syncAll, isOnlineMode, getGitHubConfig } = await import('../utils/github');
+      if (isOnlineMode() && getGitHubConfig()) {
+        console.log('Entering Archive - syncing all data...');
+        syncAll();  // No await - background sync
+      }
+    })();
+    
+    // Listen for sync-complete to reload items
     const handleSyncComplete = () => {
-      console.log('Sync completed, reloading archive...');
+      console.log('Sync complete - reloading archived items');
       loadArchivedItems();
     };
     window.addEventListener('sync-complete', handleSyncComplete);
@@ -161,6 +195,9 @@ export function Archive({ onClose, sidebarOpen = false, onToggleSidebar }: Archi
   const restoreItems = () => {
     if (selectedIds.size === 0) return;
 
+    const now = Date.now();
+    const deviceId = getDeviceId();
+
     // Restore lists
     const listsData = localStorage.getItem('notes-app-lists');
     if (listsData) {
@@ -168,7 +205,12 @@ export function Archive({ onClose, sidebarOpen = false, onToggleSidebar }: Archi
       const updated = lists.map((l: any) => {
         if (selectedIds.has(l.id)) {
           const { archived, archivedAt, ...rest } = l;
-          return rest;
+          return {
+            ...rest,
+            version: (rest.version || 0) + 1,
+            timestamp: now,
+            deviceId
+          };
         }
         return l;
       });
@@ -183,7 +225,12 @@ export function Archive({ onClose, sidebarOpen = false, onToggleSidebar }: Archi
       const updated = notes.map((n: any) => {
         if (selectedIds.has(n.id)) {
           const { archived, archivedAt, ...rest } = n;
-          return rest;
+          return {
+            ...rest,
+            version: (rest.version || 0) + 1,
+            timestamp: now,
+            deviceId
+          };
         }
         return n;
       });
@@ -198,23 +245,18 @@ export function Archive({ onClose, sidebarOpen = false, onToggleSidebar }: Archi
       const updated = events.map((e: any) => {
         if (selectedIds.has(e.id)) {
           const { archived, archivedAt, ...rest } = e;
-          return rest;
+          return {
+            ...rest,
+            version: (rest.version || 0) + 1,
+            timestamp: now,
+            deviceId
+          };
         }
         return e;
       });
       localStorage.setItem('notes-app-events', JSON.stringify(updated));
       localStorage.setItem('notes-app-events-timestamp', Date.now().toString());
     }
-
-    // Queue sync for all types
-    import('../utils/github').then(({ queueSync, getGitHubConfig }) => {
-      const config = getGitHubConfig();
-      if (config) {
-        queueSync('lists');
-        queueSync('notes');
-        queueSync('events');
-      }
-    });
 
     setSelectedIds(new Set());
     loadArchivedItems();
@@ -225,6 +267,8 @@ export function Archive({ onClose, sidebarOpen = false, onToggleSidebar }: Archi
     if (!confirm('Move selected items to trash?')) return;
 
     const now = new Date().toISOString();
+    const timestamp = Date.now();
+    const deviceId = getDeviceId();
 
     // Delete lists (move to trash)
     const listsData = localStorage.getItem('notes-app-lists');
@@ -233,7 +277,14 @@ export function Archive({ onClose, sidebarOpen = false, onToggleSidebar }: Archi
       const updated = lists.map((l: any) => {
         if (selectedIds.has(l.id)) {
           const { archived, archivedAt, ...rest } = l;
-          return { ...rest, deleted: true, deletedAt: now };
+          return { 
+            ...rest, 
+            deleted: true, 
+            deletedAt: now,
+            version: (rest.version || 0) + 1,
+            timestamp,
+            deviceId
+          };
         }
         return l;
       });
@@ -248,7 +299,14 @@ export function Archive({ onClose, sidebarOpen = false, onToggleSidebar }: Archi
       const updated = notes.map((n: any) => {
         if (selectedIds.has(n.id)) {
           const { archived, archivedAt, ...rest } = n;
-          return { ...rest, deleted: true, deletedAt: now };
+          return { 
+            ...rest, 
+            deleted: true, 
+            deletedAt: now,
+            version: (rest.version || 0) + 1,
+            timestamp,
+            deviceId
+          };
         }
         return n;
       });
@@ -263,7 +321,14 @@ export function Archive({ onClose, sidebarOpen = false, onToggleSidebar }: Archi
       const updated = events.map((e: any) => {
         if (selectedIds.has(e.id)) {
           const { archived, archivedAt, ...rest } = e;
-          return { ...rest, deleted: true, deletedAt: now };
+          return { 
+            ...rest, 
+            deleted: true, 
+            deletedAt: now,
+            version: (rest.version || 0) + 1,
+            timestamp,
+            deviceId
+          };
         }
         return e;
       });
@@ -271,18 +336,21 @@ export function Archive({ onClose, sidebarOpen = false, onToggleSidebar }: Archi
       localStorage.setItem('notes-app-events-timestamp', Date.now().toString());
     }
 
-    // Queue sync for all types
-    import('../utils/github').then(({ queueSync, getGitHubConfig }) => {
-      const config = getGitHubConfig();
-      if (config) {
-        queueSync('lists');
-        queueSync('notes');
-        queueSync('events');
-      }
-    });
-
     setSelectedIds(new Set());
     loadArchivedItems();
+    
+    // Sync after moving to trash
+    (async () => {
+      const { syncDataType, isOnlineMode, getGitHubConfig } = await import('../utils/github');
+      if (isOnlineMode() && getGitHubConfig()) {
+        console.log('Items moved to trash from archive - syncing...');
+        await Promise.all([
+          syncDataType('lists'),
+          syncDataType('notes'),
+          syncDataType('events')
+        ]);
+      }
+    })();
   };
 
   const totalArchived = archivedLists.length + archivedNotes.length + archivedEvents.length;
@@ -340,16 +408,16 @@ export function Archive({ onClose, sidebarOpen = false, onToggleSidebar }: Archi
             const isMagazineFeatured = gridViewMode === 'magazine' && index === 0;
             
             const cardClass = gridViewMode === 'list' 
-              ? `card transition-all cursor-pointer hover:shadow-lg ${selectedIds.has(item.id) ? 'ring-2 ring-primary-600 bg-primary-50 dark:bg-primary-900/20' : ''} flex flex-row items-center gap-4 py-3`
+              ? `card transition-all cursor-pointer hover:shadow-lg overflow-hidden ${selectedIds.has(item.id) ? 'ring-2 ring-primary-600 bg-primary-50 dark:bg-primary-900/20' : ''} flex flex-row items-center gap-4 py-3`
               : gridViewMode === 'compact'
-              ? `card transition-all cursor-pointer hover:shadow-lg ${selectedIds.has(item.id) ? 'ring-2 ring-primary-600 bg-primary-50 dark:bg-primary-900/20' : ''} p-3`
+              ? `card transition-all cursor-pointer hover:shadow-lg overflow-hidden ${selectedIds.has(item.id) ? 'ring-2 ring-primary-600 bg-primary-50 dark:bg-primary-900/20' : ''} p-3`
               : gridViewMode === 'masonry'
-              ? `card transition-all cursor-pointer hover:shadow-lg ${selectedIds.has(item.id) ? 'ring-2 ring-primary-600 bg-primary-50 dark:bg-primary-900/20' : ''} break-inside-avoid mb-3`
+              ? `card transition-all cursor-pointer hover:shadow-lg overflow-hidden ${selectedIds.has(item.id) ? 'ring-2 ring-primary-600 bg-primary-50 dark:bg-primary-900/20' : ''} break-inside-avoid mb-3`
               : gridViewMode === 'table'
-              ? `card transition-all cursor-pointer hover:shadow-lg ${selectedIds.has(item.id) ? 'ring-2 ring-primary-600 bg-primary-50 dark:bg-primary-900/20' : ''} py-2 px-4 mb-1`
+              ? `card transition-all cursor-pointer hover:shadow-lg overflow-hidden ${selectedIds.has(item.id) ? 'ring-2 ring-primary-600 bg-primary-50 dark:bg-primary-900/20' : ''} py-2 px-4 mb-1`
               : gridViewMode === 'magazine'
-              ? `card transition-all cursor-pointer hover:shadow-lg ${selectedIds.has(item.id) ? 'ring-2 ring-primary-600 bg-primary-50 dark:bg-primary-900/20' : ''} ${isMagazineFeatured ? 'md:col-span-2 lg:col-span-3' : ''}`
-              : `card transition-all cursor-pointer hover:shadow-lg ${selectedIds.has(item.id) ? 'ring-2 ring-primary-600 bg-primary-50 dark:bg-primary-900/20' : ''}`;
+              ? `card transition-all cursor-pointer hover:shadow-lg overflow-hidden ${selectedIds.has(item.id) ? 'ring-2 ring-primary-600 bg-primary-50 dark:bg-primary-900/20' : ''} ${isMagazineFeatured ? 'md:col-span-2 lg:col-span-3' : ''}`
+              : `card transition-all cursor-pointer hover:shadow-lg overflow-hidden ${selectedIds.has(item.id) ? 'ring-2 ring-primary-600 bg-primary-50 dark:bg-primary-900/20' : ''}`;
             
             return (
               <div
@@ -384,7 +452,7 @@ export function Archive({ onClose, sidebarOpen = false, onToggleSidebar }: Archi
                 ) : gridViewMode === 'table' ? (
                   /* Table view layout */
                   <div className="grid grid-cols-12 gap-4 items-center">
-                    <div className="col-span-5 flex items-center gap-2">
+                    <div className="col-span-5 flex items-center gap-2 min-w-0">
                       {selectionMode && (
                         <div className="flex-shrink-0">
                           {selectedIds.has(item.id) ? (
@@ -394,9 +462,9 @@ export function Archive({ onClose, sidebarOpen = false, onToggleSidebar }: Archi
                           )}
                         </div>
                       )}
-                      <h4 className="font-semibold text-sm truncate">{item.title}</h4>
+                      <h4 className="font-semibold text-sm truncate min-w-0">{item.title}</h4>
                     </div>
-                    <div className="col-span-3 hidden md:block">
+                    <div className="col-span-3 hidden md:block min-w-0">
                       {item.subtitle && (
                         <p className="text-xs text-gray-600 dark:text-gray-400 truncate">{item.subtitle}</p>
                       )}
@@ -420,11 +488,11 @@ export function Archive({ onClose, sidebarOpen = false, onToggleSidebar }: Archi
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
-                      <h4 className={`font-semibold mb-1 ${gridViewMode === 'compact' ? 'text-sm' : isMagazineFeatured ? 'text-2xl' : 'text-lg'}`}>
+                      <h4 className={`font-semibold mb-1 truncate ${gridViewMode === 'compact' ? 'text-sm' : isMagazineFeatured ? 'text-2xl' : 'text-lg'}`}>
                         {item.title}
                       </h4>
                       {item.subtitle && (
-                        <p className={`text-gray-600 dark:text-gray-400 mb-2 ${gridViewMode === 'compact' ? 'text-xs line-clamp-1' : 'text-sm'}`}>
+                        <p className={`text-gray-600 dark:text-gray-400 mb-2 break-words ${gridViewMode === 'compact' ? 'text-xs line-clamp-1' : 'text-sm line-clamp-2'}`}>
                           {item.subtitle}
                         </p>
                       )}
@@ -563,7 +631,7 @@ export function Archive({ onClose, sidebarOpen = false, onToggleSidebar }: Archi
 
               <IconButton
                 icon={X}
-                onClick={onClose}
+                onClick={handleClose}
                 tooltip="Close"
                 variant="default"
               />
@@ -609,6 +677,8 @@ export function Archive({ onClose, sidebarOpen = false, onToggleSidebar }: Archi
                     if (currentItem) {
                       const itemId = currentItem.id;
                       const itemType = currentItem.type;
+                      const now = Date.now();
+                      const deviceId = getDeviceId();
                       
                       // Restore the item
                       if (itemType === 'list') {
@@ -618,7 +688,12 @@ export function Archive({ onClose, sidebarOpen = false, onToggleSidebar }: Archi
                           const updated = lists.map((l: any) => {
                             if (l.id === itemId) {
                               const { archived, archivedAt, ...rest } = l;
-                              return rest;
+                              return {
+                                ...rest,
+                                version: (rest.version || 0) + 1,
+                                timestamp: now,
+                                deviceId
+                              };
                             }
                             return l;
                           });
@@ -632,7 +707,12 @@ export function Archive({ onClose, sidebarOpen = false, onToggleSidebar }: Archi
                           const updated = notes.map((n: any) => {
                             if (n.id === itemId) {
                               const { archived, archivedAt, ...rest } = n;
-                              return rest;
+                              return {
+                                ...rest,
+                                version: (rest.version || 0) + 1,
+                                timestamp: now,
+                                deviceId
+                              };
                             }
                             return n;
                           });
@@ -646,7 +726,12 @@ export function Archive({ onClose, sidebarOpen = false, onToggleSidebar }: Archi
                           const updated = events.map((e: any) => {
                             if (e.id === itemId) {
                               const { archived, archivedAt, ...rest } = e;
-                              return rest;
+                              return {
+                                ...rest,
+                                version: (rest.version || 0) + 1,
+                                timestamp: now,
+                                deviceId
+                              };
                             }
                             return e;
                           });
@@ -670,6 +755,8 @@ export function Archive({ onClose, sidebarOpen = false, onToggleSidebar }: Archi
                       const itemId = currentItem.id;
                       const itemType = currentItem.type;
                       const now = new Date().toISOString();
+                      const timestamp = Date.now();
+                      const deviceId = getDeviceId();
                       
                       // Delete the item (move to trash)
                       if (itemType === 'list') {
@@ -679,7 +766,14 @@ export function Archive({ onClose, sidebarOpen = false, onToggleSidebar }: Archi
                           const updated = lists.map((l: any) => {
                             if (l.id === itemId) {
                               const { archived, archivedAt, ...rest } = l;
-                              return { ...rest, deleted: true, deletedAt: now };
+                              return { 
+                                ...rest, 
+                                deleted: true, 
+                                deletedAt: now,
+                                version: (rest.version || 0) + 1,
+                                timestamp,
+                                deviceId
+                              };
                             }
                             return l;
                           });
@@ -693,7 +787,14 @@ export function Archive({ onClose, sidebarOpen = false, onToggleSidebar }: Archi
                           const updated = notes.map((n: any) => {
                             if (n.id === itemId) {
                               const { archived, archivedAt, ...rest } = n;
-                              return { ...rest, deleted: true, deletedAt: now };
+                              return { 
+                                ...rest, 
+                                deleted: true, 
+                                deletedAt: now,
+                                version: (rest.version || 0) + 1,
+                                timestamp,
+                                deviceId
+                              };
                             }
                             return n;
                           });
@@ -707,7 +808,14 @@ export function Archive({ onClose, sidebarOpen = false, onToggleSidebar }: Archi
                           const updated = events.map((e: any) => {
                             if (e.id === itemId) {
                               const { archived, archivedAt, ...rest } = e;
-                              return { ...rest, deleted: true, deletedAt: now };
+                              return { 
+                                ...rest, 
+                                deleted: true, 
+                                deletedAt: now,
+                                version: (rest.version || 0) + 1,
+                                timestamp,
+                                deviceId
+                              };
                             }
                             return e;
                           });
@@ -719,6 +827,21 @@ export function Archive({ onClose, sidebarOpen = false, onToggleSidebar }: Archi
                       // Reload and go back
                       loadArchivedItems();
                       backToList();
+                      
+                      // Sync after moving to trash
+                      (async () => {
+                        const { syncDataType, isOnlineMode, getGitHubConfig } = await import('../utils/github');
+                        if (isOnlineMode() && getGitHubConfig()) {
+                          console.log('Item moved to trash from archive - syncing...');
+                          if (itemType === 'list') {
+                            await syncDataType('lists');
+                          } else if (itemType === 'note') {
+                            await syncDataType('notes');
+                          } else if (itemType === 'event') {
+                            await syncDataType('events');
+                          }
+                        }
+                      })();
                     }
                   }}
                   tooltip="Delete"

@@ -1,0 +1,45 @@
+name: Conflict Detector
+
+on:
+  push:
+    paths:
+      - 'v3/lists/**/*.json'
+      - 'v3/notes/**/*.json'
+      - 'v3/events/**/*.json'
+    branches:
+      - main
+
+jobs:
+  detect-conflicts:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 5  # Get last 5 commits to catch concurrent pushes
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Detect and resolve conflicts
+        run: |
+          node .github/scripts/detect-conflicts.js
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Commit merged results or conflict reports
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          
+          # Check if there are any changes to commit
+          if [ -n "$(git status --porcelain)" ]; then
+            git add .
+            git commit -m "Auto-merge conflicts or create conflict reports [skip ci]"
+            git push
+          else
+            echo "No conflicts detected or resolved"
+          fi
