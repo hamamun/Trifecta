@@ -262,8 +262,8 @@ This project is open source and available under the MIT License.
 
 ## 👤 Author
 
-**namamun**
-- GitHub: [@namamun](https://github.com/namamun)
+**hamamun**
+- GitHub: [@hamamun](https://github.com/namamun)
 
 ## 🤝 Contributing
 
